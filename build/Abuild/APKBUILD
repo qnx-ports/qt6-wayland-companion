@@ -1,0 +1,89 @@
+# Alpine-Maintainer: Bart Ribbers <bribbers@disroot.org>
+# Maintainer: Felix Xing <fxing@qnx.com>
+pkgname=qt6-wayland
+pkgver=6.10.0
+pkgrel=0
+pkgdesc="Provides APIs for Wayland"
+url="https://qt.io/"
+arch="all"
+license="LGPL-2.1-only AND LGPL-3.0-only AND GPL-3.0-only AND Qt-GPL-exception-1.0"
+depends="libc++
+        qnx-egl
+        qnx-gles
+        qnx-io-sock
+        qnx-libdrm
+        qt6-base
+        qt6-declarative
+        qt6-svg
+        wayland
+        "
+depends_dev="
+    qt6-base-dev
+    qt6-base-private-dev
+    qt6-declarative-dev
+    qt6-svg-dev
+    vulkan-headers
+    "
+makedepends="$depends_dev
+    cmake
+    perl
+    ninja
+    qt6-declarative-private-dev
+    "
+
+subpackages="$pkgname-dev"
+options="!check" # No tests
+
+# Make sure this package is installed when a Qt application is installed and a
+# Wayland session is available on the system
+install_if="wayland qt6-qtbase"
+
+source="https://download.qt.io/official_releases/qt/${pkgver%.*}/${pkgver/_/-}/submodules/qtwayland-everywhere-src-${pkgver/_/-}.tar.xz"
+builddir="$srcdir/qtwayland-everywhere-src-${pkgver/_/-}"
+
+build() {
+    # It's qcc here, but compiled with clang on the selfhosted system
+    if [[ $CARCH == "x86_64" ]]; then
+        _triplet="qnx-x86-64-qcc"
+    elif [[ $CARCH == "aarch64" ]]; then
+        _triplet="qnx-aarch64le-qcc"
+    else
+        die "$CARCH not supported"
+    fi
+
+    # Clang does not support fortify source on QNX
+    _extra_flags="-U_FORTIFY_SOURCE"
+    _warn="-Wno-character-conversion"
+
+    export CC=clang
+    export CXX=clang++
+    export CFLAGS="$_extra_flags $_warn"
+    export CXXFLAGS="$_extra_flags $_warn"
+    export LDFLAGS="-lsocket"
+    export LD_LIBRARY_PATH="$builddir/build/lib:$LD_LIBRARY_PATH"
+
+    cmake -B build -G Ninja \
+        -DCMAKE_SKIP_RPATH=ON \
+        -DQT_QMAKE_TARGET_MKSPEC=$_triplet \
+        -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_MESSAGE_LOG_LEVEL=STATUS \
+        -DFEATURE_pkg_config=ON
+
+    cmake --build build --parallel
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install build
+}
+
+dev() {
+    default_dev
+
+    amove usr/lib/qt6/sbom
+}
+
+sha512sums="
+421fd79b3d10ffcfff9c04be73dbc23a91cae53728f6f03384f79744ec7ec997506e650c0f79f43d6121b80b71c94d0b24e0a57ef7178e4431eee6f2c4466bf4  qtwayland-everywhere-src-6.10.0.tar.xz
+"

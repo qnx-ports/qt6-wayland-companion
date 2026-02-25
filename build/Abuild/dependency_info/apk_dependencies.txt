@@ -1,0 +1,4 @@
+abuild
+qnx-packaging
+qnx-screen-intel
+
